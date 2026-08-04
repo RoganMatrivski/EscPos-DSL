@@ -1,0 +1,11 @@
+[package]
+name = "escpos-dsl"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+boltffi = "0.29.2"
+escpos = "0.19.0"
