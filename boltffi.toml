@@ -6,7 +6,7 @@ global_args = []
 [cargo.command_args]
 
 [package]
-name = "escpos-dsl"
+name = "escpos_dsl"
 
 [targets.apple]
 enabled = true
@@ -106,6 +106,7 @@ enabled = false
 
 [targets.csharp]
 output = "dist/csharp"
-enabled = false
+enabled = true
+package_id = "id.my.rgmtrv.EscposDsl"
 
 [targets.csharp.nuget]

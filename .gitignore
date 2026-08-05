@@ -1,2 +1,4 @@
 /target
 /tmp
+# Boltffi build path
+/dist
