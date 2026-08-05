@@ -4,7 +4,7 @@ pub mod compiler;
 pub mod driver;
 pub mod image_helper;
 
-pub use compiler::{compile, CompileError};
+pub use compiler::{compile, CompileError, DEFAULT_MAX_CHARS_PER_LINE};
 pub use image_helper::encode_image_tag;
 
 #[data]
@@ -13,13 +13,13 @@ pub struct ReceiptBytes {
 }
 
 #[export]
-pub fn compile_dsl(dsl: String) -> Result<ReceiptBytes, String> {
-    compile(&dsl)
+pub fn compile_dsl(dsl: String, max_chars_per_line: u8) -> Result<ReceiptBytes, String> {
+    compile(&dsl, max_chars_per_line)
         .map(|bytes| ReceiptBytes { bytes })
         .map_err(|e| e.to_string())
 }
 
 #[export]
-pub fn compile_dsl_raw(dsl: String) -> Result<Vec<u8>, String> {
-    compile(&dsl).map_err(|e| e.to_string())
+pub fn compile_dsl_raw(dsl: String, max_chars_per_line: u8) -> Result<Vec<u8>, String> {
+    compile(&dsl, max_chars_per_line).map_err(|e| e.to_string())
 }

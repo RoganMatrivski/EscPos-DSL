@@ -9,6 +9,8 @@ use winnow::{ModalResult, Parser};
 
 use crate::driver::MemoryDriver;
 
+pub const DEFAULT_MAX_CHARS_PER_LINE: u8 = 32; // Default 32 chars for 58mm printer
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
     PrinterError(String),
@@ -50,6 +52,7 @@ enum Token<'a> {
     UnderlineClose,
     RightOpen,
     RightClose,
+    AutoSpace { max: Option<u8> },
     SizeOpen { w: u8, h: u8 },
     SizeClose,
     Pos(u16),
@@ -60,7 +63,13 @@ enum Token<'a> {
     Text(&'a str),
 }
 
-pub fn compile(dsl: &str) -> Result<Vec<u8>, CompileError> {
+pub fn compile(dsl: &str, max_chars_per_line: u8) -> Result<Vec<u8>, CompileError> {
+    let max_chars = if max_chars_per_line == 0 {
+        DEFAULT_MAX_CHARS_PER_LINE
+    } else {
+        max_chars_per_line
+    };
+
     let driver = MemoryDriver::new();
     let mut printer = Printer::new(driver.clone(), Protocol::default(), None);
 
@@ -96,6 +105,7 @@ pub fn compile(dsl: &str) -> Result<Vec<u8>, CompileError> {
 
         parse_and_emit_line(
             input,
+            max_chars,
             &mut printer,
             &mut base_alignment,
             &mut current_alignment,
@@ -153,8 +163,9 @@ fn parse_token<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
         literal("</u>").value(Token::UnderlineClose),
         alt((literal("<r>"), literal("<r-align>"), literal("<r/>"), literal("<r-align/>"))).value(Token::RightOpen),
         alt((literal("</r>"), literal("</r-align>"))).value(Token::RightClose),
+        parse_autospace_tag,
         alt((literal("<big>"), literal("<double-size>"), literal("<d>"), literal("<h1>"), literal("<h2>"))).value(Token::SizeOpen { w: 2, h: 2 }),
-        alt((literal("</big>"), literal("</double-size>"), literal("</d>"), literal("</h1>"), literal("</h2>"))).value(Token::SizeClose),
+        alt((literal("</big>"), literal("</double-size>"), literal("</d>"), literal("<h1>"), literal("</h2>"))).value(Token::SizeClose),
         alt((literal("<dh>"), literal("<double-height>"))).value(Token::SizeOpen { w: 1, h: 2 }),
         alt((literal("</dh>"), literal("</double-height>"))).value(Token::SizeClose),
         alt((literal("<dw>"), literal("<double-width>"))).value(Token::SizeOpen { w: 2, h: 1 }),
@@ -168,6 +179,17 @@ fn parse_token<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
         parse_unknown_tag,
         parse_text_token,
     )).parse_next(input)
+}
+
+fn parse_autospace_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
+    let _ = literal("<autospace").parse_next(input)?;
+    let body = take_until(0.., ">").parse_next(input)?;
+    let _ = literal(">").parse_next(input)?;
+
+    let max = parse_attribute(body, "max")
+        .and_then(|s| s.parse::<u8>().ok());
+
+    Ok(Token::AutoSpace { max })
 }
 
 fn parse_size_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
@@ -258,8 +280,19 @@ fn parse_line_tokens<'i>(mut input: &'i str) -> Vec<Token<'i>> {
     res.unwrap_or_default()
 }
 
+fn count_token_chars(tokens: &[Token], current_width_scale: u8) -> usize {
+    let mut total_chars = 0usize;
+    for token in tokens {
+        if let Token::Text(t) = token {
+            total_chars += t.chars().count() * (current_width_scale as usize);
+        }
+    }
+    total_chars
+}
+
 fn parse_and_emit_line(
     input: &str,
+    max_chars_per_line: u8,
     printer: &mut Printer<MemoryDriver>,
     base_alignment: &mut JustifyMode,
     current_alignment: &mut JustifyMode,
@@ -270,8 +303,11 @@ fn parse_and_emit_line(
     in_underline: &mut bool,
 ) -> Result<(), CompileError> {
     let tokens = parse_line_tokens(input);
+    let mut printed_text_on_line = false;
 
-    for token in tokens {
+    let mut i = 0;
+    while i < tokens.len() {
+        let token = &tokens[i];
         match token {
             Token::BoldOpen => {
                 *in_bold = true;
@@ -289,10 +325,80 @@ fn parse_and_emit_line(
                 *in_underline = false;
                 printer.underline(UnderlineMode::None).map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
+            Token::AutoSpace { max } => {
+                let target_max = max.unwrap_or(max_chars_per_line) as usize;
+                let left_chars = count_token_chars(&tokens[..i], current_size.0);
+                let right_chars = count_token_chars(&tokens[i + 1..], current_size.0);
+                let spaces_needed = target_max.saturating_sub(left_chars + right_chars);
+
+                if spaces_needed > 0 {
+                    let spaces = " ".repeat(spaces_needed);
+                    printer.write(&spaces).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                }
+            }
             Token::RightOpen => {
-                alignment_stack.push(*current_alignment);
-                *current_alignment = JustifyMode::RIGHT;
-                printer.justify(JustifyMode::RIGHT).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                if !printed_text_on_line {
+                    // Line-level right align
+                    alignment_stack.push(*current_alignment);
+                    *current_alignment = JustifyMode::RIGHT;
+                    printer.justify(JustifyMode::RIGHT).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                } else {
+                    // Mid-line right align: pad with whitespace to max_chars_per_line
+                    let mut right_tokens = Vec::new();
+                    let mut j = i + 1;
+                    while j < tokens.len() && tokens[j] != Token::RightClose {
+                        right_tokens.push(tokens[j].clone());
+                        j += 1;
+                    }
+
+                    let left_chars = count_token_chars(&tokens[..i], current_size.0);
+                    let right_chars = count_token_chars(&right_tokens, current_size.0);
+                    let spaces_needed = (max_chars_per_line as usize).saturating_sub(left_chars + right_chars);
+
+                    if spaces_needed > 0 {
+                        let spaces = " ".repeat(spaces_needed);
+                        printer.write(&spaces).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                    }
+
+                    // Process inner tokens inside <r>
+                    for inner_token in &right_tokens {
+                        match inner_token {
+                            Token::Text(t) => {
+                                printer.write(t).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                            }
+                            Token::BoldOpen => {
+                                *in_bold = true;
+                                printer.bold(true).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                            }
+                            Token::BoldClose => {
+                                *in_bold = false;
+                                printer.bold(false).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                            }
+                            Token::UnderlineOpen => {
+                                *in_underline = true;
+                                printer.underline(UnderlineMode::Single).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                            }
+                            Token::UnderlineClose => {
+                                *in_underline = false;
+                                printer.underline(UnderlineMode::None).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                            }
+                            Token::SizeOpen { w, h } => {
+                                size_stack.push(*current_size);
+                                *current_size = (*w, *h);
+                                printer.size(*w, *h).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                            }
+                            Token::SizeClose => {
+                                let (rw, rh) = size_stack.pop().unwrap_or((1, 1));
+                                *current_size = (rw, rh);
+                                printer.size(rw, rh).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // Skip tokens through RightClose
+                    i = j;
+                }
             }
             Token::RightClose => {
                 let restore_align = alignment_stack.pop().unwrap_or(*base_alignment);
@@ -301,8 +407,8 @@ fn parse_and_emit_line(
             }
             Token::SizeOpen { w, h } => {
                 size_stack.push(*current_size);
-                *current_size = (w, h);
-                printer.size(w, h).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                *current_size = (*w, *h);
+                printer.size(*w, *h).map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
             Token::SizeClose => {
                 let (restore_w, restore_h) = size_stack.pop().unwrap_or((1, 1));
@@ -318,15 +424,17 @@ fn parse_and_emit_line(
             Token::QrCode { size, data } => {
                 let opt = QRCodeOption::new(
                     QRCodeModel::Model2,
-                    size,
+                    *size,
                     QRCodeCorrectionLevel::L,
                 );
                 printer.qrcode_option(data, opt)
                     .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printed_text_on_line = true;
             }
             Token::Pdf417(data) => {
                 printer.pdf417(data)
                     .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printed_text_on_line = true;
             }
             Token::Img { w, h, b64 } => {
                 let b64_data = b64.trim();
@@ -337,10 +445,10 @@ fn parse_and_emit_line(
                 if let (Some(ew), Some(eh)) = (w, h) {
                     if let Ok(dyn_img) = image::load_from_memory(&img_bytes) {
                         let (aw, ah) = (dyn_img.width(), dyn_img.height());
-                        if aw != ew || ah != eh {
+                        if aw != *ew || ah != *eh {
                             return Err(CompileError::ImageSizeMismatch {
-                                expected_w: ew,
-                                expected_h: eh,
+                                expected_w: *ew,
+                                expected_h: *eh,
                                 actual_w: aw,
                                 actual_h: ah,
                             });
@@ -350,14 +458,19 @@ fn parse_and_emit_line(
 
                 printer.bit_image_from_bytes(&img_bytes)
                     .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printed_text_on_line = true;
             }
             Token::UnknownTag => {
                 // Ignore unknown tags
             }
             Token::Text(text) => {
-                printer.write(text).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                if !text.is_empty() {
+                    printer.write(text).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                    printed_text_on_line = true;
+                }
             }
         }
+        i += 1;
     }
 
     Ok(())
