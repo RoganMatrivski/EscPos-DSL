@@ -1,6 +1,6 @@
+use base64::Engine;
 use escpos::printer::Printer;
 use escpos::utils::*;
-use base64::Engine;
 use std::fmt;
 use winnow::ascii::space0;
 use winnow::combinator::{alt, delimited, repeat};
@@ -52,13 +52,25 @@ enum Token<'a> {
     UnderlineClose,
     RightOpen,
     RightClose,
-    AutoSpace { max: Option<u8> },
-    SizeOpen { w: u8, h: u8 },
+    AutoSpace {
+        max: Option<u8>,
+    },
+    SizeOpen {
+        w: u8,
+        h: u8,
+    },
     SizeClose,
     Pos(u16),
-    QrCode { size: u8, data: &'a str },
+    QrCode {
+        size: u8,
+        data: &'a str,
+    },
     Pdf417(&'a str),
-    Img { w: Option<u32>, h: Option<u32>, b64: &'a str },
+    Img {
+        w: Option<u32>,
+        h: Option<u32>,
+        b64: &'a str,
+    },
     UnknownTag,
     Text(&'a str),
 }
@@ -74,7 +86,9 @@ pub fn compile(dsl: &str, max_chars_per_line: u8) -> Result<Vec<u8>, CompileErro
     let mut printer = Printer::new(driver.clone(), Protocol::default(), None);
 
     // Initial printer reset
-    printer.init().map_err(|e| CompileError::PrinterError(e.to_string()))?;
+    printer
+        .init()
+        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
 
     let lines: Vec<&str> = dsl.split('\n').collect();
     let mut base_alignment = JustifyMode::LEFT;
@@ -95,7 +109,9 @@ pub fn compile(dsl: &str, max_chars_per_line: u8) -> Result<Vec<u8>, CompileErro
 
         // Apply base alignment for current line
         let mut current_alignment = base_alignment;
-        printer.justify(current_alignment).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+        printer
+            .justify(current_alignment)
+            .map_err(|e| CompileError::PrinterError(e.to_string()))?;
 
         let mut alignment_stack: Vec<JustifyMode> = Vec::new();
         let mut size_stack: Vec<(u8, u8)> = Vec::new();
@@ -118,30 +134,42 @@ pub fn compile(dsl: &str, max_chars_per_line: u8) -> Result<Vec<u8>, CompileErro
 
         // Line end resets bold, underline, and text size
         if in_bold {
-            printer.bold(false).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+            printer
+                .bold(false)
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
         }
         if in_underline {
-            printer.underline(UnderlineMode::None).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+            printer
+                .underline(UnderlineMode::None)
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
         }
         if current_size != (1, 1) {
-            printer.size(1, 1).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+            printer
+                .size(1, 1)
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
         }
 
         // Emit LF for every line (including blank lines), unless it's the trailing empty line from split
         if line_idx < lines.len() - 1 || !line.is_empty() {
-            printer.feed().map_err(|e| CompileError::PrinterError(e.to_string()))?;
+            printer
+                .feed()
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
         }
     }
 
     // Flush all commands to the driver
-    printer.print_cut().map_err(|e| CompileError::PrinterError(e.to_string()))?;
+    printer
+        .print_cut()
+        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
 
     Ok(driver.get_bytes())
 }
 
 fn is_comment_line(input: &mut &str) -> bool {
     let mut check_input = *input;
-    let res: ModalResult<()> = (space0, literal('#')).map(|_| ()).parse_next(&mut check_input);
+    let res: ModalResult<()> = (space0, literal('#'))
+        .map(|_| ())
+        .parse_next(&mut check_input);
     res.is_ok()
 }
 
@@ -161,11 +189,31 @@ fn parse_token<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
         literal("</b>").value(Token::BoldClose),
         literal("<u>").value(Token::UnderlineOpen),
         literal("</u>").value(Token::UnderlineClose),
-        alt((literal("<r>"), literal("<r-align>"), literal("<r/>"), literal("<r-align/>"))).value(Token::RightOpen),
+        alt((
+            literal("<r>"),
+            literal("<r-align>"),
+            literal("<r/>"),
+            literal("<r-align/>"),
+        ))
+        .value(Token::RightOpen),
         alt((literal("</r>"), literal("</r-align>"))).value(Token::RightClose),
         parse_autospace_tag,
-        alt((literal("<big>"), literal("<double-size>"), literal("<d>"), literal("<h1>"), literal("<h2>"))).value(Token::SizeOpen { w: 2, h: 2 }),
-        alt((literal("</big>"), literal("</double-size>"), literal("</d>"), literal("<h1>"), literal("</h2>"))).value(Token::SizeClose),
+        alt((
+            literal("<big>"),
+            literal("<double-size>"),
+            literal("<d>"),
+            literal("<h1>"),
+            literal("<h2>"),
+        ))
+        .value(Token::SizeOpen { w: 2, h: 2 }),
+        alt((
+            literal("</big>"),
+            literal("</double-size>"),
+            literal("</d>"),
+            literal("<h1>"),
+            literal("</h2>"),
+        ))
+        .value(Token::SizeClose),
         alt((literal("<dh>"), literal("<double-height>"))).value(Token::SizeOpen { w: 1, h: 2 }),
         alt((literal("</dh>"), literal("</double-height>"))).value(Token::SizeClose),
         alt((literal("<dw>"), literal("<double-width>"))).value(Token::SizeOpen { w: 2, h: 1 }),
@@ -178,7 +226,8 @@ fn parse_token<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
         parse_img_tag,
         parse_unknown_tag,
         parse_text_token,
-    )).parse_next(input)
+    ))
+    .parse_next(input)
 }
 
 fn parse_autospace_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
@@ -186,8 +235,7 @@ fn parse_autospace_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
     let body = take_until(0.., ">").parse_next(input)?;
     let _ = literal(">").parse_next(input)?;
 
-    let max = parse_attribute(body, "max")
-        .and_then(|s| s.parse::<u8>().ok());
+    let max = parse_attribute(body, "max").and_then(|s| s.parse::<u8>().ok());
 
     Ok(Token::AutoSpace { max })
 }
@@ -311,19 +359,27 @@ fn parse_and_emit_line(
         match token {
             Token::BoldOpen => {
                 *in_bold = true;
-                printer.bold(true).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printer
+                    .bold(true)
+                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
             Token::BoldClose => {
                 *in_bold = false;
-                printer.bold(false).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printer
+                    .bold(false)
+                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
             Token::UnderlineOpen => {
                 *in_underline = true;
-                printer.underline(UnderlineMode::Single).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printer
+                    .underline(UnderlineMode::Single)
+                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
             Token::UnderlineClose => {
                 *in_underline = false;
-                printer.underline(UnderlineMode::None).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printer
+                    .underline(UnderlineMode::None)
+                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
             Token::AutoSpace { max } => {
                 let target_max = max.unwrap_or(max_chars_per_line) as usize;
@@ -333,7 +389,9 @@ fn parse_and_emit_line(
 
                 if spaces_needed > 0 {
                     let spaces = " ".repeat(spaces_needed);
-                    printer.write(&spaces).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                    printer
+                        .write(&spaces)
+                        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                 }
             }
             Token::RightOpen => {
@@ -341,7 +399,9 @@ fn parse_and_emit_line(
                     // Line-level right align
                     alignment_stack.push(*current_alignment);
                     *current_alignment = JustifyMode::RIGHT;
-                    printer.justify(JustifyMode::RIGHT).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                    printer
+                        .justify(JustifyMode::RIGHT)
+                        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                 } else {
                     // Mid-line right align: pad with whitespace to max_chars_per_line
                     let mut right_tokens = Vec::new();
@@ -353,44 +413,61 @@ fn parse_and_emit_line(
 
                     let left_chars = count_token_chars(&tokens[..i], current_size.0);
                     let right_chars = count_token_chars(&right_tokens, current_size.0);
-                    let spaces_needed = (max_chars_per_line as usize).saturating_sub(left_chars + right_chars);
+                    let spaces_needed =
+                        (max_chars_per_line as usize).saturating_sub(left_chars + right_chars);
 
                     if spaces_needed > 0 {
                         let spaces = " ".repeat(spaces_needed);
-                        printer.write(&spaces).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                        printer
+                            .write(&spaces)
+                            .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                     }
 
                     // Process inner tokens inside <r>
                     for inner_token in &right_tokens {
                         match inner_token {
                             Token::Text(t) => {
-                                printer.write(t).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                                printer
+                                    .write(t)
+                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                             }
                             Token::BoldOpen => {
                                 *in_bold = true;
-                                printer.bold(true).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                                printer
+                                    .bold(true)
+                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                             }
                             Token::BoldClose => {
                                 *in_bold = false;
-                                printer.bold(false).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                                printer
+                                    .bold(false)
+                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                             }
                             Token::UnderlineOpen => {
                                 *in_underline = true;
-                                printer.underline(UnderlineMode::Single).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                                printer
+                                    .underline(UnderlineMode::Single)
+                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                             }
                             Token::UnderlineClose => {
                                 *in_underline = false;
-                                printer.underline(UnderlineMode::None).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                                printer
+                                    .underline(UnderlineMode::None)
+                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                             }
                             Token::SizeOpen { w, h } => {
                                 size_stack.push(*current_size);
                                 *current_size = (*w, *h);
-                                printer.size(*w, *h).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                                printer
+                                    .size(*w, *h)
+                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                             }
                             Token::SizeClose => {
                                 let (rw, rh) = size_stack.pop().unwrap_or((1, 1));
                                 *current_size = (rw, rh);
-                                printer.size(rw, rh).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                                printer
+                                    .size(rw, rh)
+                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                             }
                             _ => {}
                         }
@@ -403,36 +480,41 @@ fn parse_and_emit_line(
             Token::RightClose => {
                 let restore_align = alignment_stack.pop().unwrap_or(*base_alignment);
                 *current_alignment = restore_align;
-                printer.justify(restore_align).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printer
+                    .justify(restore_align)
+                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
             Token::SizeOpen { w, h } => {
                 size_stack.push(*current_size);
                 *current_size = (*w, *h);
-                printer.size(*w, *h).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printer
+                    .size(*w, *h)
+                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
             Token::SizeClose => {
                 let (restore_w, restore_h) = size_stack.pop().unwrap_or((1, 1));
                 *current_size = (restore_w, restore_h);
-                printer.size(restore_w, restore_h).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                printer
+                    .size(restore_w, restore_h)
+                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
             Token::Pos(x) => {
                 let n_l = (x & 0xFF) as u8;
                 let n_h = ((x >> 8) & 0xFF) as u8;
-                printer.custom(&[0x1b, 0x24, n_l, n_h])
+                printer
+                    .custom(&[0x1b, 0x24, n_l, n_h])
                     .map_err(|e| CompileError::PrinterError(e.to_string()))?;
             }
             Token::QrCode { size, data } => {
-                let opt = QRCodeOption::new(
-                    QRCodeModel::Model2,
-                    *size,
-                    QRCodeCorrectionLevel::L,
-                );
-                printer.qrcode_option(data, opt)
+                let opt = QRCodeOption::new(QRCodeModel::Model2, *size, QRCodeCorrectionLevel::L);
+                printer
+                    .qrcode_option(data, opt)
                     .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                 printed_text_on_line = true;
             }
             Token::Pdf417(data) => {
-                printer.pdf417(data)
+                printer
+                    .pdf417(data)
                     .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                 printed_text_on_line = true;
             }
@@ -456,7 +538,8 @@ fn parse_and_emit_line(
                     }
                 }
 
-                printer.bit_image_from_bytes(&img_bytes)
+                printer
+                    .bit_image_from_bytes(&img_bytes)
                     .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                 printed_text_on_line = true;
             }
@@ -465,7 +548,9 @@ fn parse_and_emit_line(
             }
             Token::Text(text) => {
                 if !text.is_empty() {
-                    printer.write(text).map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                    printer
+                        .write(text)
+                        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                     printed_text_on_line = true;
                 }
             }

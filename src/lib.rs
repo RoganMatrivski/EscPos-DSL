@@ -4,7 +4,7 @@ pub mod compiler;
 pub mod driver;
 pub mod image_helper;
 
-pub use compiler::{compile, CompileError, DEFAULT_MAX_CHARS_PER_LINE};
+pub use compiler::{CompileError, DEFAULT_MAX_CHARS_PER_LINE, compile};
 pub use image_helper::encode_image_tag;
 
 #[data]
