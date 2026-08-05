@@ -1,0 +1,174 @@
+use escpos_dsl::{compile, encode_image_tag};
+use image::{DynamicImage, ImageBuffer, Luma};
+
+#[test]
+fn test_acceptance_sample_receipt() {
+    let dsl = r#"[C]<b>ORDER #045</b>
+[C]--------------------------------
+[L]2<pos x="48"/>SHIRT<r>9.99</r>
+[L]<pos x="48"/>+ Size: S
+[L]1<pos x="48"/>HAT<r>24.99</r>
+[C]--------------------------------
+[R]<b>TOTAL: 34.98</b>
+[C]<qrcode size='6'>https://example.com/order/045</qrcode>"#;
+
+    let bytes = compile(dsl).expect("Sample receipt compilation failed");
+    assert!(!bytes.is_empty());
+
+    // Check broken/forbidden commands NOT present
+    // CR (0x0D)
+    assert!(!bytes.contains(&0x0D), "Compiled bytes must not contain CR (0x0D)");
+
+    // ESC 3 (0x1B 0x33)
+    assert!(!contains_subslice(&bytes, &[0x1B, 0x33]), "Compiled bytes must not contain ESC 3");
+
+    // ESC D (0x1B 0x44)
+    assert!(!contains_subslice(&bytes, &[0x1B, 0x44]), "Compiled bytes must not contain ESC D");
+
+    // ESC \ (0x1B 0x5C)
+    assert!(!contains_subslice(&bytes, &[0x1B, 0x5C]), "Compiled bytes must not contain ESC \\");
+
+    // GS L (0x1D 0x4C)
+    assert!(!contains_subslice(&bytes, &[0x1D, 0x4C]), "Compiled bytes must not contain GS L");
+
+    // Must contain ESC $ 48 (0x1B 0x24 0x30 0x00)
+    assert!(contains_subslice(&bytes, &[0x1B, 0x24, 0x30, 0x00]), "Must contain ESC $ 48");
+
+    // Must contain ESC @ (0x1B 0x40 init)
+    assert!(contains_subslice(&bytes, &[0x1B, 0x40]), "Must contain ESC @ init");
+}
+
+#[test]
+fn test_text_sizing_tags() {
+    // GS ! 17 (0x1D 0x21 0x11) is double size (2x2)
+    // GS ! 1 (0x1D 0x21 0x01) is double height (1x2)
+    // GS ! 16 (0x1D 0x21 0x10) is double width (2x1)
+    // GS ! 0 (0x1D 0x21 0x00) is reset (1x1)
+    let dsl = "[C]<big>BIG</big><dh>DH</dh><dw>DW</dw><size w='3' h='3'>S3</size>";
+    let bytes = compile(dsl).expect("Compilation failed");
+
+    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x11]), "GS ! 17 for <big>");
+    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x01]), "GS ! 1 for <dh>");
+    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x10]), "GS ! 16 for <dw>");
+    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x22]), "GS ! 0x22 for <size w=3 h=3>");
+    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x00]), "GS ! 0 for reset size");
+}
+
+#[test]
+fn test_comments() {
+    let dsl = "[L]Hello\n# This is a comment\n  # Indented comment\nWorld";
+    let bytes = compile(dsl).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    assert!(text.contains("Hello"));
+    assert!(text.contains("World"));
+    assert!(!text.contains("This is a comment"));
+    assert!(!text.contains("Indented comment"));
+}
+
+#[test]
+fn test_unclosed_tags() {
+    let dsl = "[L]<b>Unclosed bold\nNormal text";
+    let bytes = compile(dsl).expect("Compilation failed");
+
+    // Bold should turn on for line 1 and reset at line 2
+    assert!(contains_subslice(&bytes, &[0x1B, 0x45, 0x01]), "Bold on");
+    assert!(contains_subslice(&bytes, &[0x1B, 0x45, 0x00]), "Bold off at line end");
+}
+
+#[test]
+fn test_unknown_tags() {
+    let dsl = "[L]Hello <unknown_tag_foo>World";
+    let bytes = compile(dsl).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    assert!(text.contains("Hello World"));
+    assert!(!text.contains("unknown_tag_foo"));
+}
+
+#[test]
+fn test_empty_input() {
+    let bytes = compile("").expect("Compilation failed");
+    assert!(!bytes.is_empty()); // Contains printer init sequence
+}
+
+#[test]
+fn test_long_text_wrapping() {
+    let long_line = "A".repeat(100);
+    let dsl = format!("[L]{}", long_line);
+    let bytes = compile(&dsl).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    assert!(text.contains(&long_line));
+}
+
+#[test]
+fn test_pos_two_byte_encoding() {
+    // pos x="300" => 300 = 0x012C -> low byte 0x2C (44), high byte 0x01 (1)
+    let dsl = r#"<pos x="300"/>"#;
+    let bytes = compile(dsl).expect("Compilation failed");
+
+    assert!(contains_subslice(&bytes, &[0x1B, 0x24, 0x2C, 0x01]), "ESC $ 300 byte sequence");
+}
+
+#[test]
+fn test_qrcode_large_data() {
+    let long_data = "A".repeat(300);
+    let dsl = format!("<qrcode size='6'>{}</qrcode>", long_data);
+    let bytes = compile(&dsl).expect("Compilation failed");
+
+    // QR code command GS ( k (0x1D 0x28 0x6B)
+    assert!(contains_subslice(&bytes, &[0x1D, 0x28, 0x6B]), "Must contain GS ( k");
+}
+
+#[test]
+fn test_r_span_restore_non_default_alignment() {
+    // [C] line base alignment is CENTER. <r> goes RIGHT, </r> reverts to CENTER (ESC a 1), NOT LEFT.
+    let dsl = "[C]Left<r>Right</r>Center";
+    let bytes = compile(dsl).expect("Compilation failed");
+
+    // CENTER = ESC a 1 (0x1B 0x61 0x01)
+    // RIGHT = ESC a 2 (0x1B 0x61 0x02)
+    assert!(contains_subslice(&bytes, &[0x1B, 0x61, 0x01]), "Center alignment");
+    assert!(contains_subslice(&bytes, &[0x1B, 0x61, 0x02]), "Right alignment");
+
+    // After </r>, should re-emit ESC a 1 (CENTER)
+    let pos_right = find_subslice(&bytes, &[0x1B, 0x61, 0x02]).expect("Found RIGHT");
+    let pos_restore = find_subslice(&bytes[pos_right..], &[0x1B, 0x61, 0x01]);
+    assert!(pos_restore.is_some(), "Restored to Center alignment after </r>");
+}
+
+#[test]
+fn test_r_align_alias_tag() {
+    let dsl = "[L]<r-align>RightText</r-align>";
+    let bytes = compile(dsl).expect("Compilation failed");
+    assert!(contains_subslice(&bytes, &[0x1B, 0x61, 0x02]), "Right alignment via <r-align>");
+}
+
+#[test]
+fn test_img_roundtrip_fixture() {
+    // Create 4x4 checkerboard image fixture
+    let mut img_buf = ImageBuffer::new(4, 4);
+    for y in 0..4 {
+        for x in 0..4 {
+            let val = if (x + y) % 2 == 0 { 255 } else { 0 };
+            img_buf.put_pixel(x, y, Luma([val]));
+        }
+    }
+    let dyn_img = DynamicImage::ImageLuma8(img_buf);
+
+    let tag = encode_image_tag(&dyn_img).expect("Failed to encode image tag");
+    assert!(tag.starts_with(r#"<img w="4" h="4">"#));
+
+    let bytes = compile(&tag).expect("Failed to compile image tag");
+    // GS v 0 raster image command (0x1D 0x76 0x30)
+    assert!(contains_subslice(&bytes, &[0x1D, 0x76, 0x30]), "Must emit GS v 0");
+}
+
+fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    find_subslice(haystack, needle).is_some()
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|window| window == needle)
+}

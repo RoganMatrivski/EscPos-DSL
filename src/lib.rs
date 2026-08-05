@@ -1,13 +1,25 @@
 use boltffi::*;
 
+pub mod compiler;
+pub mod driver;
+pub mod image_helper;
+
+pub use compiler::{compile, CompileError};
+pub use image_helper::encode_image_tag;
+
 #[data]
-#[derive(Clone, Copy)]
-pub struct Point {
-    pub x: f64,
-    pub y: f64,
+pub struct ReceiptBytes {
+    pub bytes: Vec<u8>,
 }
 
 #[export]
-pub fn distance(a: Point, b: Point) -> f64 {
-    ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt()
+pub fn compile_dsl(dsl: String) -> Result<ReceiptBytes, String> {
+    compile(&dsl)
+        .map(|bytes| ReceiptBytes { bytes })
+        .map_err(|e| e.to_string())
+}
+
+#[export]
+pub fn compile_dsl_raw(dsl: String) -> Result<Vec<u8>, String> {
+    compile(&dsl).map_err(|e| e.to_string())
 }

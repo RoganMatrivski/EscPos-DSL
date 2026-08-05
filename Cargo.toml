@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["staticlib", "cdylib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
 boltffi = "0.29.2"
-escpos = "0.19.0"
+escpos = { version = "0.19.0", features = ["graphics"] }
+image = "0.25"
+base64 = "0.22"
+winnow = "0.7"

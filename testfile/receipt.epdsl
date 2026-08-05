@@ -1,0 +1,29 @@
+# [C]<img w="128" h="64">BASE64_LOGO_DATA_HERE</img>
+
+[C]<b><big>FRANCHISE NAME</big></b>
+[C]Branch Name #101
+
+[C]<b>ORDER #045</b>
+
+[C]<qrcode size='6'>https://example.com/order/045</qrcode>
+[C]<b>PAID - ONLINE PAYMENT</b>
+
+[C]--------------------------------
+[L]Customer<pos x="120"/>: John Doe
+[L]Phone   <pos x="120"/>: +1 555-0199
+[L]Table   <pos x="120"/>: T-04
+
+[C]--------------------------------
+[L]2<pos x="48"/>SHIRT<r>19.98</r>
+[L]<pos x="48"/>+ Size: M
+[L]<pos x="48"/>+ Color: Blue
+[L]1<pos x="48"/>HAT<r>24.99</r>
+[L]<pos x="48"/>+ Extra embroidery
+
+[C]--------------------------------
+[R]<b>TOTAL: 44.97</b>
+
+[C]--------------------------------
+[C]<b>Thank You!</b>
+[C]Visit us at example.com
+[C]Support: +1 800-555-0100
