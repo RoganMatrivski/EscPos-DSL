@@ -63,9 +63,9 @@ jobs:
         run: |
           cargo install boltffi_cli --version 0.29.3 || cargo install boltffi_cli
 
-      - name: Build libraries with boltffi
+      - name: Build and pack libraries with boltffi
         run: |
-          boltffi build --release
+          boltffi pack all --release
 
       - name: Sync generated Android bindings
         run: |
