@@ -14,17 +14,17 @@
 [L]Customer   : Hadi
 [L]Table      : 10
 [C]================================================
-[L]2   Number 9 <autospace/> $5.98
-[L]1   Number 9 Large <autospace/> $3.99
-[L]1   Number 6 <autospace/> $2.99
-[L]    Extra Dip
+[L]<r-pad len='5'>2</r-pad>Number 9 <autospace/> $5.98
+[L]<r-pad len='5'>1</r-pad>Number 9 Large <autospace/> $3.99
+[L]<r-pad len='5'>1</r-pad>Number 6 <autospace/> $2.99
+[L]<r-pad len='5'> </r-pad>Extra Dip
 
-[L]1   Number 7 <autospace/> $3.49
+[L]<r-pad len='5'>1</r-pad>Number 7 <autospace/> $3.49
 
-[L]2   Number 45 <autospace/> $7.98
-[L]    One with Cheese
+[L]<r-pad len='5'>2</r-pad>Number 45 <autospace/> $7.98
+[L]<r-pad len='5'> </r-pad>One with Cheese
 
-[L]1   Large Soda <autospace/> $1.29
+[L]<r-pad len='5'>1</r-pad>Large Soda <autospace/> $1.29
 
 [L]================================================
 [L]Subtotal <autospace/> $25.72

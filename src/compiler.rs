@@ -409,8 +409,9 @@ fn count_token_chars(tokens: &[Token], current_width_scale: u8) -> usize {
     let mut width_scale = current_width_scale;
     let mut size_stack = Vec::new();
 
-    for token in tokens {
-        match token {
+    let mut i = 0;
+    while i < tokens.len() {
+        match &tokens[i] {
             Token::Text(t) => {
                 total_chars += t.chars().count() * (width_scale as usize);
             }
@@ -421,8 +422,56 @@ fn count_token_chars(tokens: &[Token], current_width_scale: u8) -> usize {
             Token::SizeClose => {
                 width_scale = size_stack.pop().unwrap_or(current_width_scale);
             }
-            _ => {}
+            Token::LPadSelfClosing { len, .. } | Token::RPadSelfClosing { len, .. } => {
+                total_chars += len * (width_scale as usize);
+            }
+            Token::LPadOpen { len, .. } => {
+                let mut j = i + 1;
+                while j < tokens.len() && tokens[j] != Token::LPadClose {
+                    j += 1;
+                }
+                let inner_tokens = &tokens[i + 1..j];
+                let inner_chars = count_token_chars(inner_tokens, width_scale);
+                let target_len = len * (width_scale as usize);
+                total_chars += std::cmp::max(target_len, inner_chars);
+                i = j;
+            }
+            Token::RPadOpen { len, .. } => {
+                let mut j = i + 1;
+                while j < tokens.len() && tokens[j] != Token::RPadClose {
+                    j += 1;
+                }
+                let inner_tokens = &tokens[i + 1..j];
+                let inner_chars = count_token_chars(inner_tokens, width_scale);
+                let target_len = len * (width_scale as usize);
+                total_chars += std::cmp::max(target_len, inner_chars);
+                i = j;
+            }
+            Token::RightOpen => {
+                let mut j = i + 1;
+                while j < tokens.len() && tokens[j] != Token::RightClose {
+                    j += 1;
+                }
+                let inner_tokens = &tokens[i + 1..j];
+                let inner_chars = count_token_chars(inner_tokens, width_scale);
+                total_chars += inner_chars;
+                i = j;
+            }
+            Token::BoldOpen
+            | Token::BoldClose
+            | Token::UnderlineOpen
+            | Token::UnderlineClose
+            | Token::LPadClose
+            | Token::RPadClose
+            | Token::RightClose
+            | Token::AutoSpace { .. }
+            | Token::Pos(_)
+            | Token::QrCode { .. }
+            | Token::Pdf417(_)
+            | Token::Img { .. }
+            | Token::UnknownTag => {}
         }
+        i += 1;
     }
     total_chars
 }

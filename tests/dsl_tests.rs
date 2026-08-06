@@ -226,6 +226,37 @@ fn test_pad_self_closing() {
     assert!(text.contains("     ABC"), "Expected 5 spaces before ABC");
 }
 
+#[test]
+fn test_autospace_with_padding() {
+    // Line total width = 32.
+    // "<r-pad len='5'>2</r-pad>" = 5 chars ("2    ")
+    // "Number 9" = 8 chars
+    // "$5.98" = 5 chars
+    // Total occupied = 5 + 8 + 5 = 18 chars.
+    // autospace should output 32 - 18 = 14 spaces.
+    let dsl = "[L]<r-pad len='5'>2</r-pad>Number 9<autospace/>$5.98";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    let expected = format!("2    Number 9{}$5.98", " ".repeat(14));
+    assert!(text.contains(&expected), "Expected autospace to account for r-pad padding");
+}
+
+#[test]
+fn test_autospace_with_lpad() {
+    // Line total width = 32.
+    // "<l-pad len='10'>ABC</l-pad>" = 10 chars ("       ABC")
+    // "$10.00" = 6 chars
+    // Total occupied = 10 + 6 = 16 chars.
+    // autospace should output 32 - 16 = 16 spaces.
+    let dsl = "[L]<l-pad len='10'>ABC</l-pad><autospace/>$10.00";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    let expected = format!("       ABC{}$10.00", " ".repeat(16));
+    assert!(text.contains(&expected), "Expected autospace to account for l-pad padding");
+}
+
 fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
     find_subslice(haystack, needle).is_some()
 }
