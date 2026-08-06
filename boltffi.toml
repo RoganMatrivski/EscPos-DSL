@@ -44,7 +44,7 @@ enabled = false
 preview_prune_unsupported = false
 
 [targets.wasm]
-enabled = true
+enabled = false
 triple = "wasm32-unknown-unknown"
 profile = "release"
 output = "dist/wasm"
