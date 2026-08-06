@@ -113,7 +113,7 @@ jobs:
 
       - name: Build and pack C# with boltffi
         run: |
-          boltffi pack csharp --release
+          boltffi pack csharp --release --overlay .github/boltffi-${{ matrix.platform }}.toml
 
       - name: Upload C# dist artifact
         uses: actions/upload-artifact@v4

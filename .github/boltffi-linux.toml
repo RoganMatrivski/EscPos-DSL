@@ -1,0 +1,2 @@
+[targets.csharp]
+runtime_identifiers = ["linux-x64"]
