@@ -59,9 +59,9 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Install boltffi
+      - name: Install boltffi CLI
         run: |
-          cargo install boltffi --version 0.29.3 || cargo install boltffi
+          cargo install boltffi_cli --version 0.29.3 || cargo install boltffi_cli
 
       - name: Build libraries with boltffi
         run: |
