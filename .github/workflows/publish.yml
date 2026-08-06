@@ -16,7 +16,7 @@ permissions:
   packages: write
 
 jobs:
-  build-and-publish:
+  publish-android:
     runs-on: ubuntu-latest
 
     steps:
@@ -44,17 +44,13 @@ jobs:
       - name: Setup Android NDK
         run: |
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
+          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
@@ -63,9 +59,9 @@ jobs:
         run: |
           cargo install boltffi_cli --version 0.29.3 || cargo install boltffi_cli
 
-      - name: Build and pack libraries with boltffi
+      - name: Build and pack Android with boltffi
         run: |
-          boltffi pack all --release
+          boltffi pack android --release
 
       - name: Sync generated Android bindings
         run: |
@@ -87,7 +83,83 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
-      - name: Build and Publish NuGet Package to GitHub Packages
+  build-csharp-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install boltffi CLI
+        run: |
+          cargo install boltffi_cli --version 0.29.3 || cargo install boltffi_cli
+
+      - name: Build and pack C# with boltffi
+        run: |
+          boltffi pack csharp --release
+
+      - name: Upload C# dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-dist-${{ matrix.platform }}
+          path: dist/csharp/
+
+  publish-nuget:
+    needs: build-csharp-native
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine package version
+        id: get_version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION=$(grep -m1 '^version =' Cargo.toml | cut -d '"' -f 2)
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Resolved version: ${VERSION}"
+
+      - name: Download C# build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: csharp-dist-*
+          path: artifacts/
+          merge-multiple: true
+
+      - name: Consolidate C# dist directory
+        run: |
+          mkdir -p dist/csharp
+          cp -rn artifacts/* dist/csharp/ || true
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build and Publish Multi-Platform NuGet Package
         run: |
           dotnet pack dist/csharp/BoltFFI.CSharp.csproj -c Release -p:Version="${{ steps.get_version.outputs.VERSION }}" -o dist/csharp/nupkg
           dotnet nuget push dist/csharp/nupkg/*.nupkg \
