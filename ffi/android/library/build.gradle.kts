@@ -41,7 +41,7 @@ publishing {
         register<MavenPublication>("release") {
             groupId = "id.my.rgmtrv"
             artifactId = "escpos-dsl"
-            version = "0.1.0"
+            version = project.findProperty("version")?.toString()?.takeIf { it.isNotEmpty() && it != "unspecified" } ?: "0.1.0"
 
             afterEvaluate {
                 from(components["release"])
@@ -51,7 +51,7 @@ publishing {
     repositories {
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/RoganMatrivski/escpos-dsl")
+            url = uri("https://maven.pkg.github.com/${System.getenv("GITHUB_REPOSITORY") ?: "RoganMatrivski/escpos-dsl"}")
             credentials {
                 username = System.getenv("GITHUB_ACTOR")
                 password = System.getenv("GITHUB_TOKEN")

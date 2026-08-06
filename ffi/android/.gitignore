@@ -16,3 +16,5 @@ local.properties
 
 # Generated native libs
 **/jniLibs/**/*.so
+.kotlin/
+
