@@ -179,6 +179,53 @@ fn test_img_roundtrip_fixture() {
     assert!(contains_subslice(&bytes, &[0x1D, 0x76, 0x30]), "Must emit GS v 0");
 }
 
+#[test]
+fn test_lpad_container() {
+    let dsl = "[L]<l-pad len='10'>ABC</l-pad>";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    let expected = format!("{}ABC", " ".repeat(7));
+    assert!(text.contains(&expected), "Expected 7 spaces left padding before ABC");
+}
+
+#[test]
+fn test_lpad_custom_char() {
+    let dsl = "[L]<l-pad len='8' ch='0'>123</l-pad>";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    assert!(text.contains("00000123"), "Expected 5 leading zeros before 123");
+}
+
+#[test]
+fn test_rpad_container() {
+    let dsl = "[L]<r-pad len='10'>ABC</r-pad>";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    let expected = format!("ABC{}", " ".repeat(7));
+    assert!(text.contains(&expected), "Expected ABC followed by 7 spaces right padding");
+}
+
+#[test]
+fn test_rpad_custom_char() {
+    let dsl = "[L]<r-pad len='12' ch='.'>TOTAL</r-pad>";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    assert!(text.contains("TOTAL......."), "Expected TOTAL followed by 7 dots");
+}
+
+#[test]
+fn test_pad_self_closing() {
+    let dsl = "[L]<l-pad len='5'/>ABC";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    assert!(text.contains("     ABC"), "Expected 5 spaces before ABC");
+}
+
 fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
     find_subslice(haystack, needle).is_some()
 }

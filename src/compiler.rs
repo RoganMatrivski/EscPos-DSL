@@ -55,6 +55,24 @@ enum Token<'a> {
     AutoSpace {
         max: Option<u8>,
     },
+    LPadOpen {
+        len: usize,
+        fill: char,
+    },
+    LPadSelfClosing {
+        len: usize,
+        fill: char,
+    },
+    LPadClose,
+    RPadOpen {
+        len: usize,
+        fill: char,
+    },
+    RPadSelfClosing {
+        len: usize,
+        fill: char,
+    },
+    RPadClose,
     SizeOpen {
         w: u8,
         h: u8,
@@ -185,47 +203,55 @@ fn parse_line_prefix(input: &mut &str) -> Option<JustifyMode> {
 
 fn parse_token<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
     alt((
-        literal("<b>").value(Token::BoldOpen),
-        literal("</b>").value(Token::BoldClose),
-        literal("<u>").value(Token::UnderlineOpen),
-        literal("</u>").value(Token::UnderlineClose),
         alt((
-            literal("<r>"),
-            literal("<r-align>"),
-            literal("<r/>"),
-            literal("<r-align/>"),
-        ))
-        .value(Token::RightOpen),
-        alt((literal("</r>"), literal("</r-align>"))).value(Token::RightClose),
-        parse_autospace_tag,
+            literal("<b>").value(Token::BoldOpen),
+            literal("</b>").value(Token::BoldClose),
+            literal("<u>").value(Token::UnderlineOpen),
+            literal("</u>").value(Token::UnderlineClose),
+            alt((
+                literal("<r>"),
+                literal("<r-align>"),
+                literal("<r/>"),
+                literal("<r-align/>"),
+            ))
+            .value(Token::RightOpen),
+            alt((literal("</r>"), literal("</r-align>"))).value(Token::RightClose),
+            parse_autospace_tag,
+            parse_lpad_tag,
+            alt((literal("</l-pad>"), literal("</lpad>"), literal("</left-pad>"))).value(Token::LPadClose),
+            parse_rpad_tag,
+            alt((literal("</r-pad>"), literal("</rpad>"), literal("</right-pad>"))).value(Token::RPadClose),
+        )),
         alt((
-            literal("<big>"),
-            literal("<double-size>"),
-            literal("<d>"),
-            literal("<h1>"),
-            literal("<h2>"),
-        ))
-        .value(Token::SizeOpen { w: 2, h: 2 }),
-        alt((
-            literal("</big>"),
-            literal("</double-size>"),
-            literal("</d>"),
-            literal("<h1>"),
-            literal("</h2>"),
-        ))
-        .value(Token::SizeClose),
-        alt((literal("<dh>"), literal("<double-height>"))).value(Token::SizeOpen { w: 1, h: 2 }),
-        alt((literal("</dh>"), literal("</double-height>"))).value(Token::SizeClose),
-        alt((literal("<dw>"), literal("<double-width>"))).value(Token::SizeOpen { w: 2, h: 1 }),
-        alt((literal("</dw>"), literal("</double-width>"))).value(Token::SizeClose),
-        parse_size_tag,
-        literal("</size>").value(Token::SizeClose),
-        parse_pos_tag,
-        parse_qrcode_tag,
-        parse_pdf417_tag,
-        parse_img_tag,
-        parse_unknown_tag,
-        parse_text_token,
+            alt((
+                literal("<big>"),
+                literal("<double-size>"),
+                literal("<d>"),
+                literal("<h1>"),
+                literal("<h2>"),
+            ))
+            .value(Token::SizeOpen { w: 2, h: 2 }),
+            alt((
+                literal("</big>"),
+                literal("</double-size>"),
+                literal("</d>"),
+                literal("<h1>"),
+                literal("<h2>"),
+            ))
+            .value(Token::SizeClose),
+            alt((literal("<dh>"), literal("<double-height>"))).value(Token::SizeOpen { w: 1, h: 2 }),
+            alt((literal("</dh>"), literal("</double-height>"))).value(Token::SizeClose),
+            alt((literal("<dw>"), literal("<double-width>"))).value(Token::SizeOpen { w: 2, h: 1 }),
+            alt((literal("</dw>"), literal("</double-width>"))).value(Token::SizeClose),
+            parse_size_tag,
+            literal("</size>").value(Token::SizeClose),
+            parse_pos_tag,
+            parse_qrcode_tag,
+            parse_pdf417_tag,
+            parse_img_tag,
+            parse_unknown_tag,
+            parse_text_token,
+        )),
     ))
     .parse_next(input)
 }
@@ -238,6 +264,56 @@ fn parse_autospace_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
     let max = parse_attribute(body, "max").and_then(|s| s.parse::<u8>().ok());
 
     Ok(Token::AutoSpace { max })
+}
+
+fn parse_lpad_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
+    let _ = alt((literal("<l-pad"), literal("<lpad"), literal("<left-pad"))).parse_next(input)?;
+    let body = take_until(0.., ">").parse_next(input)?;
+    let _ = literal(">").parse_next(input)?;
+
+    let len = parse_attribute(body, "len")
+        .or_else(|| parse_attribute(body, "length"))
+        .or_else(|| parse_attribute(body, "w"))
+        .or_else(|| parse_attribute(body, "width"))
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0);
+
+    let fill = parse_attribute(body, "ch")
+        .or_else(|| parse_attribute(body, "char"))
+        .or_else(|| parse_attribute(body, "fill"))
+        .and_then(|s| s.chars().next())
+        .unwrap_or(' ');
+
+    if body.trim_end().ends_with('/') {
+        Ok(Token::LPadSelfClosing { len, fill })
+    } else {
+        Ok(Token::LPadOpen { len, fill })
+    }
+}
+
+fn parse_rpad_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
+    let _ = alt((literal("<r-pad"), literal("<rpad"), literal("<right-pad"))).parse_next(input)?;
+    let body = take_until(0.., ">").parse_next(input)?;
+    let _ = literal(">").parse_next(input)?;
+
+    let len = parse_attribute(body, "len")
+        .or_else(|| parse_attribute(body, "length"))
+        .or_else(|| parse_attribute(body, "w"))
+        .or_else(|| parse_attribute(body, "width"))
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0);
+
+    let fill = parse_attribute(body, "ch")
+        .or_else(|| parse_attribute(body, "char"))
+        .or_else(|| parse_attribute(body, "fill"))
+        .and_then(|s| s.chars().next())
+        .unwrap_or(' ');
+
+    if body.trim_end().ends_with('/') {
+        Ok(Token::RPadSelfClosing { len, fill })
+    } else {
+        Ok(Token::RPadOpen { len, fill })
+    }
 }
 
 fn parse_size_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
@@ -330,12 +406,93 @@ fn parse_line_tokens<'i>(mut input: &'i str) -> Vec<Token<'i>> {
 
 fn count_token_chars(tokens: &[Token], current_width_scale: u8) -> usize {
     let mut total_chars = 0usize;
+    let mut width_scale = current_width_scale;
+    let mut size_stack = Vec::new();
+
     for token in tokens {
-        if let Token::Text(t) = token {
-            total_chars += t.chars().count() * (current_width_scale as usize);
+        match token {
+            Token::Text(t) => {
+                total_chars += t.chars().count() * (width_scale as usize);
+            }
+            Token::SizeOpen { w, .. } => {
+                size_stack.push(width_scale);
+                width_scale = *w;
+            }
+            Token::SizeClose => {
+                width_scale = size_stack.pop().unwrap_or(current_width_scale);
+            }
+            _ => {}
         }
     }
     total_chars
+}
+
+fn process_inner_token(
+    inner_token: &Token,
+    printer: &mut Printer<MemoryDriver>,
+    in_bold: &mut bool,
+    in_underline: &mut bool,
+    current_size: &mut (u8, u8),
+    size_stack: &mut Vec<(u8, u8)>,
+    printed_text_on_line: &mut bool,
+) -> Result<(), CompileError> {
+    match inner_token {
+        Token::Text(t) => {
+            if !t.is_empty() {
+                printer
+                    .write(t)
+                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                *printed_text_on_line = true;
+            }
+        }
+        Token::BoldOpen => {
+            *in_bold = true;
+            printer
+                .bold(true)
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+        }
+        Token::BoldClose => {
+            *in_bold = false;
+            printer
+                .bold(false)
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+        }
+        Token::UnderlineOpen => {
+            *in_underline = true;
+            printer
+                .underline(UnderlineMode::Single)
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+        }
+        Token::UnderlineClose => {
+            *in_underline = false;
+            printer
+                .underline(UnderlineMode::None)
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+        }
+        Token::SizeOpen { w, h } => {
+            size_stack.push(*current_size);
+            *current_size = (*w, *h);
+            printer
+                .size(*w, *h)
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+        }
+        Token::SizeClose => {
+            let (rw, rh) = size_stack.pop().unwrap_or((1, 1));
+            *current_size = (rw, rh);
+            printer
+                .size(rw, rh)
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+        }
+        Token::Pos(x) => {
+            let n_l = (x & 0xFF) as u8;
+            let n_h = ((x >> 8) & 0xFF) as u8;
+            printer
+                .custom(&[0x1b, 0x24, n_l, n_h])
+                .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn parse_and_emit_line(
@@ -394,6 +551,86 @@ fn parse_and_emit_line(
                         .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                 }
             }
+            Token::LPadSelfClosing { len, fill } => {
+                if *len > 0 {
+                    let padding = fill.to_string().repeat(*len);
+                    printer
+                        .write(&padding)
+                        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                    printed_text_on_line = true;
+                }
+            }
+            Token::LPadOpen { len, fill } => {
+                let mut j = i + 1;
+                while j < tokens.len() && tokens[j] != Token::LPadClose {
+                    j += 1;
+                }
+                let inner_tokens = &tokens[i + 1..j];
+                let inner_chars = count_token_chars(inner_tokens, current_size.0);
+                let padding_len = len.saturating_sub(inner_chars);
+
+                if padding_len > 0 {
+                    let padding = fill.to_string().repeat(padding_len);
+                    printer
+                        .write(&padding)
+                        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                }
+
+                for inner_token in inner_tokens {
+                    process_inner_token(
+                        inner_token,
+                        printer,
+                        in_bold,
+                        in_underline,
+                        current_size,
+                        size_stack,
+                        &mut printed_text_on_line,
+                    )?;
+                }
+
+                i = j;
+            }
+            Token::LPadClose => {}
+            Token::RPadSelfClosing { len, fill } => {
+                if *len > 0 {
+                    let padding = fill.to_string().repeat(*len);
+                    printer
+                        .write(&padding)
+                        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                    printed_text_on_line = true;
+                }
+            }
+            Token::RPadOpen { len, fill } => {
+                let mut j = i + 1;
+                while j < tokens.len() && tokens[j] != Token::RPadClose {
+                    j += 1;
+                }
+                let inner_tokens = &tokens[i + 1..j];
+                let inner_chars = count_token_chars(inner_tokens, current_size.0);
+                let padding_len = len.saturating_sub(inner_chars);
+
+                for inner_token in inner_tokens {
+                    process_inner_token(
+                        inner_token,
+                        printer,
+                        in_bold,
+                        in_underline,
+                        current_size,
+                        size_stack,
+                        &mut printed_text_on_line,
+                    )?;
+                }
+
+                if padding_len > 0 {
+                    let padding = fill.to_string().repeat(padding_len);
+                    printer
+                        .write(&padding)
+                        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                }
+
+                i = j;
+            }
+            Token::RPadClose => {}
             Token::RightOpen => {
                 if !printed_text_on_line {
                     // Line-level right align
@@ -425,52 +662,15 @@ fn parse_and_emit_line(
 
                     // Process inner tokens inside <r>
                     for inner_token in &right_tokens {
-                        match inner_token {
-                            Token::Text(t) => {
-                                printer
-                                    .write(t)
-                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
-                            }
-                            Token::BoldOpen => {
-                                *in_bold = true;
-                                printer
-                                    .bold(true)
-                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
-                            }
-                            Token::BoldClose => {
-                                *in_bold = false;
-                                printer
-                                    .bold(false)
-                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
-                            }
-                            Token::UnderlineOpen => {
-                                *in_underline = true;
-                                printer
-                                    .underline(UnderlineMode::Single)
-                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
-                            }
-                            Token::UnderlineClose => {
-                                *in_underline = false;
-                                printer
-                                    .underline(UnderlineMode::None)
-                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
-                            }
-                            Token::SizeOpen { w, h } => {
-                                size_stack.push(*current_size);
-                                *current_size = (*w, *h);
-                                printer
-                                    .size(*w, *h)
-                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
-                            }
-                            Token::SizeClose => {
-                                let (rw, rh) = size_stack.pop().unwrap_or((1, 1));
-                                *current_size = (rw, rh);
-                                printer
-                                    .size(rw, rh)
-                                    .map_err(|e| CompileError::PrinterError(e.to_string()))?;
-                            }
-                            _ => {}
-                        }
+                        process_inner_token(
+                            inner_token,
+                            printer,
+                            in_bold,
+                            in_underline,
+                            current_size,
+                            size_stack,
+                            &mut printed_text_on_line,
+                        )?;
                     }
 
                     // Skip tokens through RightClose
