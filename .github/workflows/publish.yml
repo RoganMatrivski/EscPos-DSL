@@ -13,7 +13,6 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
   publish-android:
@@ -51,6 +50,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
@@ -73,15 +73,17 @@ jobs:
             cp -r dist/android/jniLibs/* ffi/android/library/src/main/jniLibs/
           fi
 
-      - name: Publish Android Package to GitHub Packages (Maven)
+      - name: Publish Android Package to Maven Central (Sonatype)
         run: |
           cd ffi/android
           chmod +x gradlew
-          ./gradlew publish -Pversion="${{ steps.get_version.outputs.VERSION }}"
+          ./gradlew publishAndReleaseToMavenCentral -Pversion="${{ steps.get_version.outputs.VERSION }}"
         env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.SONATYPE_USERNAME || secrets.MAVEN_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONATYPE_PASSWORD || secrets.MAVEN_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_SECRET_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.GPG_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryPassword: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Upload AAR to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -132,6 +134,9 @@ jobs:
   publish-nuget:
     needs: build-csharp-native
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -167,12 +172,30 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Build and Publish Multi-Platform NuGet Package
+      - name: Build NuGet Package
         run: |
           dotnet pack dist/csharp/BoltFFI.CSharp.csproj -c Release -p:Version="${{ steps.get_version.outputs.VERSION }}" -o dist/csharp/nupkg
+
+      - name: NuGet login via OIDC (Trusted Publishing)
+        uses: NuGet/login@v1
+        id: login
+        continue-on-error: true
+        with:
+          user: ${{ secrets.NUGET_USER || github.repository_owner }}
+
+      - name: Publish to NuGet.org
+        run: |
+          API_KEY="${{ steps.login.outputs.NUGET_API_KEY }}"
+          if [ -z "$API_KEY" ]; then
+            API_KEY="${{ secrets.NUGET_API_KEY }}"
+          fi
+          if [ -z "$API_KEY" ]; then
+            echo "Error: Neither Trusted Publishing OIDC login nor NUGET_API_KEY secret is available."
+            exit 1
+          fi
           dotnet nuget push dist/csharp/nupkg/*.nupkg \
-            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
-            --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --api-key "$API_KEY" \
             --skip-duplicate
 
       - name: Upload NuGet Package to GitHub Release
@@ -180,3 +203,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: dist/csharp/nupkg/*.nupkg
+
+

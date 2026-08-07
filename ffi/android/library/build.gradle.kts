@@ -1,6 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
-    `maven-publish`
+    id("com.vanniktech.maven.publish") version "0.30.0"
 }
 
 android {
@@ -28,34 +28,39 @@ android {
             jniLibs.srcDirs("src/main/jniLibs")
         }
     }
-
-    publishing {
-        singleVariant("release") {
-            withSourcesJar()
-        }
-    }
 }
 
-publishing {
-    publications {
-        register<MavenPublication>("release") {
-            groupId = "id.my.rgmtrv"
-            artifactId = "escpos-dsl"
-            version = project.findProperty("version")?.toString()?.takeIf { it.isNotEmpty() && it != "unspecified" } ?: "0.1.0"
+val resolvedVersion = project.findProperty("version")?.toString()?.takeIf { it.isNotEmpty() && it != "unspecified" } ?: "0.1.0"
 
-            afterEvaluate {
-                from(components["release"])
+mavenPublishing {
+    publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
+    signAllPublications()
+
+    coordinates("id.my.rgmtrv", "escpos-dsl", resolvedVersion)
+
+    pom {
+        name.set("escpos-dsl")
+        description.set("ESC/POS printer DSL for Android and Rust")
+        url.set("https://github.com/RoganMatrivski/escpos-dsl")
+
+        licenses {
+            license {
+                name.set("MIT License")
+                url.set("https://opensource.org/licenses/MIT")
             }
         }
-    }
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/${System.getenv("GITHUB_REPOSITORY") ?: "RoganMatrivski/escpos-dsl"}")
-            credentials {
-                username = System.getenv("GITHUB_ACTOR")
-                password = System.getenv("GITHUB_TOKEN")
+
+        developers {
+            developer {
+                id.set("RoganMatrivski")
+                name.set("Rogan Matrivski")
             }
+        }
+
+        scm {
+            connection.set("scm:git:github.com/RoganMatrivski/escpos-dsl.git")
+            developerConnection.set("scm:git:ssh://github.com/RoganMatrivski/escpos-dsl.git")
+            url.set("https://github.com/RoganMatrivski/escpos-dsl")
         }
     }
 }
