@@ -79,7 +79,7 @@ jobs:
         run: |
           cd ffi/android
           chmod +x gradlew
-          ./gradlew publishAndReleaseToMavenCentral -Pversion="${{ steps.get_version.outputs.VERSION }}"
+          ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache -Pversion="${{ steps.get_version.outputs.VERSION }}"
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.SONATYPE_USERNAME || secrets.MAVEN_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONATYPE_PASSWORD || secrets.MAVEN_PASSWORD }}
