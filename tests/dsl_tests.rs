@@ -257,6 +257,46 @@ fn test_autospace_with_lpad() {
     assert!(text.contains(&expected), "Expected autospace to account for l-pad padding");
 }
 
+#[test]
+fn test_hr_default_length() {
+    let dsl = "[C]<hr/>";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    let expected = "-".repeat(32);
+    assert!(text.contains(&expected), "Expected 32 default dashes for <hr/>");
+}
+
+#[test]
+fn test_hr_custom_length() {
+    let dsl = "[C]<hr len='16'/>";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    let expected = "-".repeat(16);
+    assert!(text.contains(&expected), "Expected 16 dashes for <hr len='16'/>");
+}
+
+#[test]
+fn test_hr_custom_char() {
+    let dsl = "[C]<hr ch='='/>";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    let expected = "=".repeat(32);
+    assert!(text.contains(&expected), "Expected 32 equals signs for <hr ch='='/>");
+}
+
+#[test]
+fn test_hr_custom_len_and_char() {
+    let dsl = "[C]<hr len='20' ch='*'/>";
+    let bytes = compile(dsl, 32).expect("Compilation failed");
+    let text = String::from_utf8_lossy(&bytes);
+
+    let expected = "*".repeat(20);
+    assert!(text.contains(&expected), "Expected 20 asterisks for <hr len='20' ch='*'/>");
+}
+
 fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
     find_subslice(haystack, needle).is_some()
 }

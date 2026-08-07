@@ -73,6 +73,10 @@ enum Token<'a> {
         fill: char,
     },
     RPadClose,
+    Hr {
+        len: Option<usize>,
+        fill: char,
+    },
     SizeOpen {
         w: u8,
         h: u8,
@@ -221,6 +225,7 @@ fn parse_token<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
             alt((literal("</l-pad>"), literal("</lpad>"), literal("</left-pad>"))).value(Token::LPadClose),
             parse_rpad_tag,
             alt((literal("</r-pad>"), literal("</rpad>"), literal("</right-pad>"))).value(Token::RPadClose),
+            parse_hr_tag,
         )),
         alt((
             alt((
@@ -314,6 +319,27 @@ fn parse_rpad_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
     } else {
         Ok(Token::RPadOpen { len, fill })
     }
+}
+
+fn parse_hr_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
+    let _ = alt((literal("<hr"), literal("<horizontal-rule"))).parse_next(input)?;
+    let body = take_until(0.., ">").parse_next(input)?;
+    let _ = literal(">").parse_next(input)?;
+
+    let len = parse_attribute(body, "len")
+        .or_else(|| parse_attribute(body, "length"))
+        .or_else(|| parse_attribute(body, "w"))
+        .or_else(|| parse_attribute(body, "width"))
+        .or_else(|| parse_attribute(body, "count"))
+        .and_then(|s| s.parse::<usize>().ok());
+
+    let fill = parse_attribute(body, "ch")
+        .or_else(|| parse_attribute(body, "char"))
+        .or_else(|| parse_attribute(body, "fill"))
+        .and_then(|s| s.chars().next())
+        .unwrap_or('-');
+
+    Ok(Token::Hr { len, fill })
 }
 
 fn parse_size_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
@@ -424,6 +450,11 @@ fn count_token_chars(tokens: &[Token], current_width_scale: u8) -> usize {
             }
             Token::LPadSelfClosing { len, .. } | Token::RPadSelfClosing { len, .. } => {
                 total_chars += len * (width_scale as usize);
+            }
+            Token::Hr { len, .. } => {
+                if let Some(l) = len {
+                    total_chars += l * (width_scale as usize);
+                }
             }
             Token::LPadOpen { len, .. } => {
                 let mut j = i + 1;
@@ -598,6 +629,16 @@ fn parse_and_emit_line(
                     printer
                         .write(&spaces)
                         .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                }
+            }
+            Token::Hr { len, fill } => {
+                let count = len.unwrap_or(max_chars_per_line as usize);
+                if count > 0 {
+                    let hr_str = fill.to_string().repeat(count);
+                    printer
+                        .write(&hr_str)
+                        .map_err(|e| CompileError::PrinterError(e.to_string()))?;
+                    printed_text_on_line = true;
                 }
             }
             Token::LPadSelfClosing { len, fill } => {
