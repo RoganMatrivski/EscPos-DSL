@@ -65,13 +65,15 @@ jobs:
 
       - name: Sync generated Android bindings
         run: |
-          mkdir -p ffi/android/library/src/main/java ffi/android/library/src/main/jniLibs
+          mkdir -p ffi/android/library/src/main/java ffi/android/library/src/main/jniLibs ffi/android/library/src/main/resources/META-INF
           if [ -d "dist/android/kotlin/id" ]; then
             cp -r dist/android/kotlin/id ffi/android/library/src/main/java/
           fi
           if [ -d "dist/android/jniLibs" ]; then
             cp -r dist/android/jniLibs/* ffi/android/library/src/main/jniLibs/
           fi
+          cp LICENSE-MIT ffi/android/library/src/main/resources/META-INF/ || true
+          cp LICENSE-APACHE ffi/android/library/src/main/resources/META-INF/ || true
 
       - name: Publish Android Package to Maven Central (Sonatype)
         run: |
@@ -168,6 +170,8 @@ jobs:
         run: |
           mkdir -p dist/csharp
           cp -rn artifacts/* dist/csharp/ || true
+          cp LICENSE-MIT dist/csharp/ || true
+          cp LICENSE-APACHE dist/csharp/ || true
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
@@ -176,7 +180,10 @@ jobs:
 
       - name: Build NuGet Package
         run: |
-          dotnet pack dist/csharp/BoltFFI.CSharp.csproj -c Release -p:Version="${{ steps.get_version.outputs.VERSION }}" -o dist/csharp/nupkg
+          dotnet pack dist/csharp/BoltFFI.CSharp.csproj -c Release \
+            -p:Version="${{ steps.get_version.outputs.VERSION }}" \
+            -p:PackageLicenseExpression="MIT OR Apache-2.0" \
+            -o dist/csharp/nupkg
 
       - name: NuGet login via OIDC (Trusted Publishing)
         uses: NuGet/login@v1
