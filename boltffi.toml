@@ -85,6 +85,6 @@ enabled = false
 output = "dist/csharp"
 enabled = true
 target_framework = "net8.0"
-package_id = "id.my.rgmtrv.escpos_dsl"
+package_id = "RoganMatrivski.EscPosDSL"
 
 [targets.csharp.nuget]
