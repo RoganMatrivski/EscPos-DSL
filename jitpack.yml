@@ -1,9 +1,10 @@
 jdk:
-  - openjdk17
+- openjdk17
 before_install:
-  - yes | sdkmanager --licenses > /dev/null 2>&1
-  - sdkmanager "ndk-bundle"
-  - export ANDROID_NDK_HOME=$ANDROID_HOME/ndk-bundle
+  - set -e
+  - wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
+  - unzip -q android-ndk-r26b-linux.zip
+  - export ANDROID_NDK_HOME=$PWD/android-ndk-r26b
   - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   - source "$HOME/.cargo/env"
   - rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
@@ -14,4 +15,5 @@ before_install:
   - cp -r dist/android/jniLibs/* ffi/android/library/src/main/jniLibs/
   - cd ffi/android
 install:
+  - set -e
   - ./gradlew :EscposDsl:publishToMavenLocal
