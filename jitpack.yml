@@ -1,8 +1,8 @@
 jdk:
   - openjdk17
 before_install:
-  - yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1
-  - $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk-bundle"
+  - yes | sdkmanager --licenses > /dev/null 2>&1
+  - sdkmanager "ndk-bundle"
   - export ANDROID_NDK_HOME=$ANDROID_HOME/ndk-bundle
   - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   - source "$HOME/.cargo/env"
