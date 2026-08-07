@@ -1,14 +1,17 @@
 jdk:
   - openjdk17
 before_install:
+  - yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1
+  - $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk-bundle"
+  - export ANDROID_NDK_HOME=$ANDROID_HOME/ndk-bundle
   - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   - source "$HOME/.cargo/env"
   - rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
   - cargo install boltffi_cli --version 0.29.3
   - boltffi pack android --release
   - mkdir -p ffi/android/library/src/main/java ffi/android/library/src/main/jniLibs
-  - if [ -d "dist/android/kotlin/id" ]; then cp -r dist/android/kotlin/id ffi/android/library/src/main/java/; fi
-  - if [ -d "dist/android/jniLibs" ]; then cp -r dist/android/jniLibs/* ffi/android/library/src/main/jniLibs/; fi
+  - cp -r dist/android/kotlin/id ffi/android/library/src/main/java/
+  - cp -r dist/android/jniLibs/* ffi/android/library/src/main/jniLibs/
   - cd ffi/android
 install:
   - ./gradlew :EscposDsl:publishToMavenLocal
