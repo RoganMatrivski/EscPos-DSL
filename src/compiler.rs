@@ -222,9 +222,19 @@ fn parse_token<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
             alt((literal("</r>"), literal("</r-align>"))).value(Token::RightClose),
             parse_autospace_tag,
             parse_lpad_tag,
-            alt((literal("</l-pad>"), literal("</lpad>"), literal("</left-pad>"))).value(Token::LPadClose),
+            alt((
+                literal("</l-pad>"),
+                literal("</lpad>"),
+                literal("</left-pad>"),
+            ))
+            .value(Token::LPadClose),
             parse_rpad_tag,
-            alt((literal("</r-pad>"), literal("</rpad>"), literal("</right-pad>"))).value(Token::RPadClose),
+            alt((
+                literal("</r-pad>"),
+                literal("</rpad>"),
+                literal("</right-pad>"),
+            ))
+            .value(Token::RPadClose),
             parse_hr_tag,
         )),
         alt((
@@ -244,7 +254,8 @@ fn parse_token<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
                 literal("<h2>"),
             ))
             .value(Token::SizeClose),
-            alt((literal("<dh>"), literal("<double-height>"))).value(Token::SizeOpen { w: 1, h: 2 }),
+            alt((literal("<dh>"), literal("<double-height>")))
+                .value(Token::SizeOpen { w: 1, h: 2 }),
             alt((literal("</dh>"), literal("</double-height>"))).value(Token::SizeClose),
             alt((literal("<dw>"), literal("<double-width>"))).value(Token::SizeOpen { w: 2, h: 1 }),
             alt((literal("</dw>"), literal("</double-width>"))).value(Token::SizeClose),
@@ -812,7 +823,16 @@ fn parse_and_emit_line(
                 let b64_data = b64.trim();
                 let img_bytes = base64::engine::general_purpose::STANDARD
                     .decode(b64_data)
-                    .map_err(|e| CompileError::ImageDecodeError(e.to_string()))?;
+                    .map_err(|e| {
+                        let preview_len = std::cmp::min(b64_data.len(), 50);
+                        let preview = &b64_data[..preview_len];
+                        CompileError::ImageDecodeError(format!(
+                            "{} (base64 len: {}, prefix: {:?})",
+                            e,
+                            b64_data.len(),
+                            preview
+                        ))
+                    })?;
 
                 if let (Some(ew), Some(eh)) = (w, h) {
                     if let Ok(dyn_img) = image::load_from_memory(&img_bytes) {
