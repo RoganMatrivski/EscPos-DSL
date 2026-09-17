@@ -33,8 +33,14 @@ android {
 val resolvedVersion = project.findProperty("version")?.toString()?.takeIf { it.isNotEmpty() && it != "unspecified" } ?: "0.1.0"
 
 mavenPublishing {
-    publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
-    signAllPublications()
+    publishToMavenCentral(
+        com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL,
+        automaticRelease = true
+    )
+
+    if (System.getenv("JITPACK") != "true") {
+        signAllPublications()
+    }
 
     coordinates("id.my.rgmtrv", "escpos-dsl", resolvedVersion)
 
