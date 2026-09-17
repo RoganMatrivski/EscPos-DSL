@@ -834,22 +834,32 @@ fn parse_and_emit_line(
                         ))
                     })?;
 
+                let mut final_bytes = img_bytes;
                 if let (Some(ew), Some(eh)) = (w, h) {
-                    if let Ok(dyn_img) = image::load_from_memory(&img_bytes) {
+                    if let Ok(dyn_img) = image::load_from_memory(&final_bytes) {
                         let (aw, ah) = (dyn_img.width(), dyn_img.height());
                         if aw != *ew || ah != *eh {
-                            return Err(CompileError::ImageSizeMismatch {
-                                expected_w: *ew,
-                                expected_h: *eh,
-                                actual_w: aw,
-                                actual_h: ah,
-                            });
+                            let resized = dyn_img.resize_exact(
+                                *ew,
+                                *eh,
+                                image::imageops::FilterType::Lanczos3,
+                            );
+                            let mut png_bytes = Vec::new();
+                            if resized
+                                .write_to(
+                                    &mut std::io::Cursor::new(&mut png_bytes),
+                                    image::ImageFormat::Png,
+                                )
+                                .is_ok()
+                            {
+                                final_bytes = png_bytes;
+                            }
                         }
                     }
                 }
 
                 printer
-                    .bit_image_from_bytes(&img_bytes)
+                    .bit_image_from_bytes(&final_bytes)
                     .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                 printed_text_on_line = true;
             }

@@ -235,6 +235,27 @@ fn test_lenna_file_loading() {
 }
 
 #[test]
+fn test_img_auto_resize() {
+    let mut img_buf = ImageBuffer::new(4, 4);
+    for y in 0..4 {
+        for x in 0..4 {
+            let val = if (x + y) % 2 == 0 { 255 } else { 0 };
+            img_buf.put_pixel(x, y, Luma([val]));
+        }
+    }
+
+    let dyn_img = DynamicImage::ImageLuma8(img_buf);
+    let tag_encoded = encode_image_tag(&dyn_img).unwrap();
+    let tag_mismatched = tag_encoded.replace(r#"w="4" h="4""#, r#"w="8" h="8""#);
+
+    let bytes = compile(&tag_mismatched, 32).expect("Auto-resize compilation failed");
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x76, 0x30]),
+        "Must emit GS v 0"
+    );
+}
+
+#[test]
 fn test_img_roundtrip_fixture() {
     // Create 4x4 checkerboard image fixture
     let mut img_buf = ImageBuffer::new(4, 4);
