@@ -1,3 +1,4 @@
+use base64::Engine;
 use escpos_dsl::{compile, encode_image_tag};
 use image::{DynamicImage, ImageBuffer, Luma};
 
@@ -17,25 +18,46 @@ fn test_acceptance_sample_receipt() {
 
     // Check broken/forbidden commands NOT present
     // CR (0x0D)
-    assert!(!bytes.contains(&0x0D), "Compiled bytes must not contain CR (0x0D)");
+    assert!(
+        !bytes.contains(&0x0D),
+        "Compiled bytes must not contain CR (0x0D)"
+    );
 
     // ESC 3 (0x1B 0x33)
-    assert!(!contains_subslice(&bytes, &[0x1B, 0x33]), "Compiled bytes must not contain ESC 3");
+    assert!(
+        !contains_subslice(&bytes, &[0x1B, 0x33]),
+        "Compiled bytes must not contain ESC 3"
+    );
 
     // ESC D (0x1B 0x44)
-    assert!(!contains_subslice(&bytes, &[0x1B, 0x44]), "Compiled bytes must not contain ESC D");
+    assert!(
+        !contains_subslice(&bytes, &[0x1B, 0x44]),
+        "Compiled bytes must not contain ESC D"
+    );
 
     // ESC \ (0x1B 0x5C)
-    assert!(!contains_subslice(&bytes, &[0x1B, 0x5C]), "Compiled bytes must not contain ESC \\");
+    assert!(
+        !contains_subslice(&bytes, &[0x1B, 0x5C]),
+        "Compiled bytes must not contain ESC \\"
+    );
 
     // GS L (0x1D 0x4C)
-    assert!(!contains_subslice(&bytes, &[0x1D, 0x4C]), "Compiled bytes must not contain GS L");
+    assert!(
+        !contains_subslice(&bytes, &[0x1D, 0x4C]),
+        "Compiled bytes must not contain GS L"
+    );
 
     // Must contain ESC $ 48 (0x1B 0x24 0x30 0x00)
-    assert!(contains_subslice(&bytes, &[0x1B, 0x24, 0x30, 0x00]), "Must contain ESC $ 48");
+    assert!(
+        contains_subslice(&bytes, &[0x1B, 0x24, 0x30, 0x00]),
+        "Must contain ESC $ 48"
+    );
 
     // Must contain ESC @ (0x1B 0x40 init)
-    assert!(contains_subslice(&bytes, &[0x1B, 0x40]), "Must contain ESC @ init");
+    assert!(
+        contains_subslice(&bytes, &[0x1B, 0x40]),
+        "Must contain ESC @ init"
+    );
 }
 
 #[test]
@@ -47,7 +69,10 @@ fn test_autospace_tag() {
     let text = String::from_utf8_lossy(&bytes);
 
     let expected_padding = " ".repeat(21);
-    assert!(text.contains(&format!("2 SHIRT{}9.99", expected_padding)), "Must contain 21 whitespace padding chars");
+    assert!(
+        text.contains(&format!("2 SHIRT{}9.99", expected_padding)),
+        "Must contain 21 whitespace padding chars"
+    );
 }
 
 #[test]
@@ -66,11 +91,26 @@ fn test_text_sizing_tags() {
     let dsl = "[C]<big>BIG</big><dh>DH</dh><dw>DW</dw><size w='3' h='3'>S3</size>";
     let bytes = compile(dsl, 32).expect("Compilation failed");
 
-    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x11]), "GS ! 17 for <big>");
-    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x01]), "GS ! 1 for <dh>");
-    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x10]), "GS ! 16 for <dw>");
-    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x22]), "GS ! 0x22 for <size w=3 h=3>");
-    assert!(contains_subslice(&bytes, &[0x1D, 0x21, 0x00]), "GS ! 0 for reset size");
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x21, 0x11]),
+        "GS ! 17 for <big>"
+    );
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x21, 0x01]),
+        "GS ! 1 for <dh>"
+    );
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x21, 0x10]),
+        "GS ! 16 for <dw>"
+    );
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x21, 0x22]),
+        "GS ! 0x22 for <size w=3 h=3>"
+    );
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x21, 0x00]),
+        "GS ! 0 for reset size"
+    );
 }
 
 #[test]
@@ -92,7 +132,10 @@ fn test_unclosed_tags() {
 
     // Bold should turn on for line 1 and reset at line 2
     assert!(contains_subslice(&bytes, &[0x1B, 0x45, 0x01]), "Bold on");
-    assert!(contains_subslice(&bytes, &[0x1B, 0x45, 0x00]), "Bold off at line end");
+    assert!(
+        contains_subslice(&bytes, &[0x1B, 0x45, 0x00]),
+        "Bold off at line end"
+    );
 }
 
 #[test]
@@ -127,7 +170,10 @@ fn test_pos_two_byte_encoding() {
     let dsl = r#"<pos x="300"/>"#;
     let bytes = compile(dsl, 32).expect("Compilation failed");
 
-    assert!(contains_subslice(&bytes, &[0x1B, 0x24, 0x2C, 0x01]), "ESC $ 300 byte sequence");
+    assert!(
+        contains_subslice(&bytes, &[0x1B, 0x24, 0x2C, 0x01]),
+        "ESC $ 300 byte sequence"
+    );
 }
 
 #[test]
@@ -137,7 +183,10 @@ fn test_qrcode_large_data() {
     let bytes = compile(&dsl, 32).expect("Compilation failed");
 
     // QR code command GS ( k (0x1D 0x28 0x6B)
-    assert!(contains_subslice(&bytes, &[0x1D, 0x28, 0x6B]), "Must contain GS ( k");
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x28, 0x6B]),
+        "Must contain GS ( k"
+    );
 }
 
 #[test]
@@ -148,15 +197,41 @@ fn test_r_span_restore_non_default_alignment() {
 
     // CENTER = ESC a 1 (0x1B 0x61 0x01)
     // RIGHT = ESC a 2 (0x1B 0x61 0x02)
-    assert!(contains_subslice(&bytes, &[0x1B, 0x61, 0x01]), "Center alignment");
-    assert!(contains_subslice(&bytes, &[0x1B, 0x61, 0x02]), "Right alignment");
+    assert!(
+        contains_subslice(&bytes, &[0x1B, 0x61, 0x01]),
+        "Center alignment"
+    );
+    assert!(
+        contains_subslice(&bytes, &[0x1B, 0x61, 0x02]),
+        "Right alignment"
+    );
 }
 
 #[test]
 fn test_r_align_alias_tag() {
     let dsl = "[L]<r-align>RightText</r-align>";
     let bytes = compile(dsl, 32).expect("Compilation failed");
-    assert!(contains_subslice(&bytes, &[0x1B, 0x61, 0x02]), "Right alignment via <r-align>");
+    assert!(
+        contains_subslice(&bytes, &[0x1B, 0x61, 0x02]),
+        "Right alignment via <r-align>"
+    );
+}
+
+#[test]
+fn test_lenna_file_loading() {
+    if std::path::Path::new("tmp/lenna.tiff").exists() {
+        let bytes = std::fs::read("tmp/lenna.tiff").unwrap();
+        let dyn_img = image::load_from_memory(&bytes).expect("Failed to load lenna.tiff");
+        let (w, h) = (dyn_img.width(), dyn_img.height());
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        let tag = format!(r#"<img w="{}" h="{}">{}</img>"#, w, h, b64);
+
+        let compiled = compile(&tag, 32).expect("Failed to compile lenna.tiff tag");
+        assert!(
+            contains_subslice(&compiled, &[0x1D, 0x76, 0x30]),
+            "Must emit GS v 0"
+        );
+    }
 }
 
 #[test]
@@ -176,7 +251,10 @@ fn test_img_roundtrip_fixture() {
 
     let bytes = compile(&tag, 32).expect("Failed to compile image tag");
     // GS v 0 raster image command (0x1D 0x76 0x30)
-    assert!(contains_subslice(&bytes, &[0x1D, 0x76, 0x30]), "Must emit GS v 0");
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x76, 0x30]),
+        "Must emit GS v 0"
+    );
 }
 
 #[test]
@@ -186,7 +264,10 @@ fn test_lpad_container() {
     let text = String::from_utf8_lossy(&bytes);
 
     let expected = format!("{}ABC", " ".repeat(7));
-    assert!(text.contains(&expected), "Expected 7 spaces left padding before ABC");
+    assert!(
+        text.contains(&expected),
+        "Expected 7 spaces left padding before ABC"
+    );
 }
 
 #[test]
@@ -195,7 +276,10 @@ fn test_lpad_custom_char() {
     let bytes = compile(dsl, 32).expect("Compilation failed");
     let text = String::from_utf8_lossy(&bytes);
 
-    assert!(text.contains("00000123"), "Expected 5 leading zeros before 123");
+    assert!(
+        text.contains("00000123"),
+        "Expected 5 leading zeros before 123"
+    );
 }
 
 #[test]
@@ -205,7 +289,10 @@ fn test_rpad_container() {
     let text = String::from_utf8_lossy(&bytes);
 
     let expected = format!("ABC{}", " ".repeat(7));
-    assert!(text.contains(&expected), "Expected ABC followed by 7 spaces right padding");
+    assert!(
+        text.contains(&expected),
+        "Expected ABC followed by 7 spaces right padding"
+    );
 }
 
 #[test]
@@ -214,7 +301,10 @@ fn test_rpad_custom_char() {
     let bytes = compile(dsl, 32).expect("Compilation failed");
     let text = String::from_utf8_lossy(&bytes);
 
-    assert!(text.contains("TOTAL......."), "Expected TOTAL followed by 7 dots");
+    assert!(
+        text.contains("TOTAL......."),
+        "Expected TOTAL followed by 7 dots"
+    );
 }
 
 #[test]
@@ -239,7 +329,10 @@ fn test_autospace_with_padding() {
     let text = String::from_utf8_lossy(&bytes);
 
     let expected = format!("2    Number 9{}$5.98", " ".repeat(14));
-    assert!(text.contains(&expected), "Expected autospace to account for r-pad padding");
+    assert!(
+        text.contains(&expected),
+        "Expected autospace to account for r-pad padding"
+    );
 }
 
 #[test]
@@ -254,7 +347,10 @@ fn test_autospace_with_lpad() {
     let text = String::from_utf8_lossy(&bytes);
 
     let expected = format!("       ABC{}$10.00", " ".repeat(16));
-    assert!(text.contains(&expected), "Expected autospace to account for l-pad padding");
+    assert!(
+        text.contains(&expected),
+        "Expected autospace to account for l-pad padding"
+    );
 }
 
 #[test]
@@ -264,7 +360,10 @@ fn test_hr_default_length() {
     let text = String::from_utf8_lossy(&bytes);
 
     let expected = "-".repeat(32);
-    assert!(text.contains(&expected), "Expected 32 default dashes for <hr/>");
+    assert!(
+        text.contains(&expected),
+        "Expected 32 default dashes for <hr/>"
+    );
 }
 
 #[test]
@@ -274,7 +373,10 @@ fn test_hr_custom_length() {
     let text = String::from_utf8_lossy(&bytes);
 
     let expected = "-".repeat(16);
-    assert!(text.contains(&expected), "Expected 16 dashes for <hr len='16'/>");
+    assert!(
+        text.contains(&expected),
+        "Expected 16 dashes for <hr len='16'/>"
+    );
 }
 
 #[test]
@@ -284,7 +386,10 @@ fn test_hr_custom_char() {
     let text = String::from_utf8_lossy(&bytes);
 
     let expected = "=".repeat(32);
-    assert!(text.contains(&expected), "Expected 32 equals signs for <hr ch='='/>");
+    assert!(
+        text.contains(&expected),
+        "Expected 32 equals signs for <hr ch='='/>"
+    );
 }
 
 #[test]
@@ -294,7 +399,10 @@ fn test_hr_custom_len_and_char() {
     let text = String::from_utf8_lossy(&bytes);
 
     let expected = "*".repeat(20);
-    assert!(text.contains(&expected), "Expected 20 asterisks for <hr len='20' ch='*'/>");
+    assert!(
+        text.contains(&expected),
+        "Expected 20 asterisks for <hr len='20' ch='*'/>"
+    );
 }
 
 fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
@@ -302,5 +410,7 @@ fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
