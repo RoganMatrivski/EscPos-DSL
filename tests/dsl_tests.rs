@@ -1,5 +1,5 @@
 use base64::Engine;
-use escpos_dsl::{compile, encode_image_tag};
+use escpos_dsl::{DitherAlgo, compile, encode_image_tag, encode_image_tag_with_dither};
 use image::{DynamicImage, ImageBuffer, Luma};
 
 #[test]
@@ -268,10 +268,29 @@ fn test_img_roundtrip_fixture() {
     let dyn_img = DynamicImage::ImageLuma8(img_buf);
 
     let tag = encode_image_tag(&dyn_img).expect("Failed to encode image tag");
-    assert!(tag.starts_with(r#"<img w="4" h="4">"#));
+    assert!(tag.starts_with(r#"<img w="4" h="4""#));
 
     let bytes = compile(&tag, 32).expect("Failed to compile image tag");
     // GS v 0 raster image command (0x1D 0x76 0x30)
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x76, 0x30]),
+        "Must emit GS v 0"
+    );
+}
+
+#[test]
+fn test_img_dither_attribute() {
+    let mut img_buf = ImageBuffer::new(4, 4);
+    for y in 0..4 {
+        for x in 0..4 {
+            let val = if (x + y) % 2 == 0 { 255 } else { 0 };
+            img_buf.put_pixel(x, y, Luma([val]));
+        }
+    }
+    let dyn_img = DynamicImage::ImageLuma8(img_buf);
+    let tag = encode_image_tag_with_dither(&dyn_img, Some(DitherAlgo::Bayer8x8)).unwrap();
+
+    let bytes = compile(&tag, 32).expect("Dither attribute compilation failed");
     assert!(
         contains_subslice(&bytes, &[0x1D, 0x76, 0x30]),
         "Must emit GS v 0"

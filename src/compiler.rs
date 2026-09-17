@@ -10,11 +10,13 @@ use winnow::{ModalResult, Parser};
 use crate::driver::MemoryDriver;
 
 pub const DEFAULT_MAX_CHARS_PER_LINE: u8 = 32; // Default 32 chars for 58mm printer
+use crate::image_helper::DitherAlgo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CompileError {
     PrinterError(String),
     ImageDecodeError(String),
+    ImageDitherError(String),
     ImageSizeMismatch {
         expected_w: u32,
         expected_h: u32,
@@ -28,6 +30,7 @@ impl fmt::Display for CompileError {
         match self {
             CompileError::PrinterError(s) => write!(f, "Printer error: {}", s),
             CompileError::ImageDecodeError(s) => write!(f, "Image decode error: {}", s),
+            CompileError::ImageDitherError(s) => write!(f, "Image dither error: {}", s),
             CompileError::ImageSizeMismatch {
                 expected_w,
                 expected_h,
@@ -91,6 +94,7 @@ enum Token<'a> {
     Img {
         w: Option<u32>,
         h: Option<u32>,
+        dither: Option<DitherAlgo>,
         b64: &'a str,
     },
     UnknownTag,
@@ -419,8 +423,9 @@ fn parse_img_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
 
     let w = parse_attribute(header, "w").and_then(|s| s.parse::<u32>().ok());
     let h = parse_attribute(header, "h").and_then(|s| s.parse::<u32>().ok());
+    let dither = parse_attribute(header, "dither").and_then(DitherAlgo::from_str);
 
-    Ok(Token::Img { w, h, b64 })
+    Ok(Token::Img { w, h, dither, b64 })
 }
 
 fn parse_unknown_tag<'i>(input: &mut &'i str) -> ModalResult<Token<'i>> {
@@ -819,7 +824,7 @@ fn parse_and_emit_line(
                     .map_err(|e| CompileError::PrinterError(e.to_string()))?;
                 printed_text_on_line = true;
             }
-            Token::Img { w, h, b64 } => {
+            Token::Img { w, h, dither, b64 } => {
                 let b64_data = b64.trim();
                 let img_bytes = base64::engine::general_purpose::STANDARD
                     .decode(b64_data)
@@ -835,25 +840,39 @@ fn parse_and_emit_line(
                     })?;
 
                 let mut final_bytes = img_bytes;
-                if let (Some(ew), Some(eh)) = (w, h) {
-                    if let Ok(dyn_img) = image::load_from_memory(&final_bytes) {
+                if let Ok(mut dyn_img) = image::load_from_memory(&final_bytes) {
+                    let mut modified = false;
+
+                    if let (Some(ew), Some(eh)) = (w, h) {
                         let (aw, ah) = (dyn_img.width(), dyn_img.height());
                         if aw != *ew || ah != *eh {
-                            let resized = dyn_img.resize_exact(
+                            dyn_img = dyn_img.resize_exact(
                                 *ew,
                                 *eh,
                                 image::imageops::FilterType::Lanczos3,
                             );
-                            let mut png_bytes = Vec::new();
-                            if resized
-                                .write_to(
-                                    &mut std::io::Cursor::new(&mut png_bytes),
-                                    image::ImageFormat::Png,
-                                )
-                                .is_ok()
-                            {
-                                final_bytes = png_bytes;
-                            }
+                            modified = true;
+                        }
+                    }
+
+                    if let Some(algo) = dither {
+                        let mut gray = dyn_img.to_luma8();
+                        algo.apply(&mut gray)
+                            .map_err(CompileError::ImageDitherError)?;
+                        dyn_img = image::DynamicImage::ImageLuma8(gray);
+                        modified = true;
+                    }
+
+                    if modified {
+                        let mut png_bytes = Vec::new();
+                        if dyn_img
+                            .write_to(
+                                &mut std::io::Cursor::new(&mut png_bytes),
+                                image::ImageFormat::Png,
+                            )
+                            .is_ok()
+                        {
+                            final_bytes = png_bytes;
                         }
                     }
                 }

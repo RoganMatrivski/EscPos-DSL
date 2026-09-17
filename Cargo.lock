@@ -324,6 +324,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dithr"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c410c12fa41e1c0efa5d310928475586c804c9916cb4e701b652c3d16571a6c1"
+
+[[package]]
 name = "either"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -383,6 +389,7 @@ version = "0.2.2"
 dependencies = [
  "base64",
  "boltffi",
+ "dithr",
  "escpos",
  "image",
  "winnow 0.7.15",
