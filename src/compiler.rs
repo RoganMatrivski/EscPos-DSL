@@ -856,7 +856,7 @@ fn parse_and_emit_line(
                     }
 
                     if let Some(algo) = dither {
-                        let mut gray = dyn_img.to_luma8();
+                        let mut gray = crate::image_helper::to_luma_white_bg(&dyn_img);
                         algo.apply(&mut gray)
                             .map_err(CompileError::ImageDitherError)?;
                         dyn_img = image::DynamicImage::ImageLuma8(gray);

@@ -298,6 +298,29 @@ fn test_img_dither_attribute() {
 }
 
 #[test]
+fn test_img_transparency_blending() {
+    // 2x2 image, one pixel fully transparent, others opaque
+    let mut img_buf = image::RgbaImage::new(2, 2);
+    // top-left opaque red
+    img_buf.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+    // top-right fully transparent
+    img_buf.put_pixel(1, 0, image::Rgba([0, 0, 0, 0]));
+    // bottom-left opaque green
+    img_buf.put_pixel(0, 1, image::Rgba([0, 255, 0, 255]));
+    // bottom-right opaque black
+    img_buf.put_pixel(1, 1, image::Rgba([0, 0, 0, 255]));
+
+    let dyn_img = DynamicImage::ImageRgba8(img_buf);
+    let tag = encode_image_tag(&dyn_img).unwrap();
+
+    let bytes = compile(&tag, 32).expect("Compilation of transparent image failed");
+    assert!(
+        contains_subslice(&bytes, &[0x1D, 0x76, 0x30]),
+        "Must emit GS v 0"
+    );
+}
+
+#[test]
 fn test_lpad_container() {
     let dsl = "[L]<l-pad len='10'>ABC</l-pad>";
     let bytes = compile(dsl, 32).expect("Compilation failed");

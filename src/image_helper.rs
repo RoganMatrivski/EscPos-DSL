@@ -20,6 +20,19 @@ pub enum DitherAlgo {
     Stucki,
 }
 
+pub fn to_luma_white_bg(img: &DynamicImage) -> GrayImage {
+    let rgba = img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    let mut gray = GrayImage::new(w, h);
+    for (x, y, pixel) in rgba.enumerate_pixels() {
+        let alpha = pixel[3] as f32 / 255.0;
+        let luma = 0.299 * pixel[0] as f32 + 0.587 * pixel[1] as f32 + 0.114 * pixel[2] as f32;
+        let blended = (luma * alpha + 255.0 * (1.0 - alpha)).clamp(0.0, 255.0) as u8;
+        gray.put_pixel(x, y, image::Luma([blended]));
+    }
+    gray
+}
+
 impl DitherAlgo {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
@@ -76,7 +89,7 @@ pub fn encode_image_tag_with_dither(
     let width = img.width();
     let height = img.height();
 
-    let mut gray: GrayImage = img.to_luma8();
+    let mut gray: GrayImage = to_luma_white_bg(img);
     if let Some(algo) = dither {
         algo.apply(&mut gray)?;
     } else {
